@@ -22,13 +22,13 @@ Run Local Tests on ganache
 i) After successful display of public/private keys, in your command prompt, input 'test'.
 
 
-To Deploy To the Rinkeby Network
+To Deploy To the Rinkeby Network.
 
 i) After successful display of public/private keys, in your command prompt, input 'compile'.
 
 ii) Then after successful compilation, input, 'migrate --reset --network rinkeby.
 
-iii) Copy contract address from display and search on https://rinkeby.etherscan.io/
+iii) Copy contract address from display and search on https://rinkeby.etherscan.io/.
 
 
 ------------------------------------------------------------------------------------------------------------
