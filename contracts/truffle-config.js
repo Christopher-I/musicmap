@@ -8,8 +8,8 @@ networks: {
  },
  rinkeby: {
   provider: function() {
- return new HDWalletProvider("deliver kid very feature upon please tree robust common tail reward home",
-  "https://rinkeby.infura.io/v3/c3085f6dbf9347358b5ab5d30de1fdbe")
+ return new HDWalletProvider("# enter mnemonic here",
+  "enter infura address here")
      },
       network_id: '4',
       gas: 4500000,

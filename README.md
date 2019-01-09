@@ -10,7 +10,7 @@ Before Each Step:
 i) Please ensure you are using the versions listed above (most current versions 
 as at the time of initial code creation).
 
-ii)Update the truffle-config/truffle.js file with your personal infura key and mnemonic.
+ii)Update the truffle-config/truffle.js file with your personal infura address and wallet mnemonic.
 
 ii)Using your node.js command prompt. Navigate to folder 'musicmap-master/musicmap-master/contracts'.
 
