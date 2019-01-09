@@ -1,3 +1,41 @@
+WRITE UP/SET UP AND DEPLOYEMENT
+
+Truffle v5.0.01 (core: 5.0.1)
+Solidity v0.5.0 (solc-js)
+Node v8.12.0
+
+
+Before Each Step:
+
+i) Please ensure you are using the versions listed above (most current versions 
+as at the time of initial code creation).
+
+ii)Update the truffle-config/truffle.js file with your personal infura key and mnemonic.
+
+ii)Using your node.js command prompt. Navigate to folder 'musicmap-master/musicmap-master/contracts'.
+
+iii) In your command prompt, input 'truffle develop'.
+
+
+Run Local Tests on ganache
+
+i) After successful display of public/private keys, in your command prompt, input 'test'.
+
+
+To Deploy To the Rinkeby Network
+
+i) After successful display of public/private keys, in your command prompt, input 'compile'.
+
+ii) Then after successful compilation, input, 'migrate --reset --network rinkeby.
+
+iii) Copy contract address from display and search on https://rinkeby.etherscan.io/
+
+
+------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------
+
+
+
 [![bannerocn](./specs/images/repo-banner@2x.png)](https://oceanprotocol.com)
 [![bannermm](./specs/images/banner-mm-github.png)](https://musicmap.info)
 
