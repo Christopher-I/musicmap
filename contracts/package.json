@@ -14,5 +14,8 @@
   "devDependencies": {
     "chai": "^4.2.0",
     "truffle-assertions": "^0.7.1"
+  },
+  "dependencies": {
+    "openzeppelin-solidity": "^2.1.1"
   }
 }

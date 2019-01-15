@@ -1,210 +1,270 @@
 pragma solidity ^0.5.0;
 
+import "./Ownable.sol";
+import "./SafeMath.sol";
 
-contract OceanBounty  {
+contract MusicMap is Ownable {
+
+    ///@dev use of safemath
+    using SafeMath for uint256;
+
+
     
-        /**************  constants ********************/
-    int constant public WhitelistThreshold = 5;  //whtelist threshold
-    int constant public BlacklistThreshold = -5; // blacklist threshold
-    int constant public punishmentMultiplier = 5; // punishment multiplier
-    int public noOfTracks; // number of tracks in track registry
+    /// @dev constants
+    int8 constant public WhitelistThreshold = 5;  
+    int8 constant public BlacklistThreshold = -5; 
+    int8 constant public PunishmentMultiplier = 5; 
+    int8 public noOfTracks; 
     
-       /**************  enums ********************/
+    /// @notice enums  
+    enum TrackState { SANDBOX, WHITELIST, BLACKLIST} 
+    enum TrackGenre {JAZZ, BLUES, ROCKNROLL, COUNTRY}    
+    event VoteSuccessful (address userAddress, int8 trackgenre, int voteValue, int8 noOfVotesToday);
+    event TrackCreationSuccessful (bytes32 trackhash, address userAddress, int8 trackgenre, uint voteValue);  
     
-    enum state { sandbox, whitelist, blacklist} // list of track state options
-    enum genre {jazz, blues, rocknroll, country} //list of all available genres
-    
-           /**************  enums ********************/
-    
-    event voteSuccessful (address userId, int8 trackgenre, int voteValue, uint noOfVotesToday); //event to return a successful vote transaction
-    event trackCreationSuccessful(uint trackhash, address userId, int8 trackgenre, uint voteValue);  //event to return a successful track creation transaction
-    
-        /************* structs ***************/
-       //details of each track and its history
-    struct trackInfo  {
-        uint hash ;       //this is a hash of all metadata (stored offchain in mongodb for that track)(also acts as track id)  
-        int8 trackGenre;  //the track genre
-        int trackRating;  //sum total of positive and negative votes for this track
-        state trackState; //state of the track (neutral/whitelist/blacklist)
-        address [] vouches; //an array of all user ids that vouched for the track
-        address [] rejects; //an array of all user ids that rejected the track
+    /// @notice structs 
+    struct Track  {      
+        int8 trackGenre;  
+        int8 trackRating; 
+        bytes32 hash ;  
+        TrackState trackState; 
+        address [] vouches; 
+        address [] rejects; 
         mapping(address => bool) userDidVote;
     }
     
-   //details of each user and their history  
-    struct userInfo{
-        address userId;  //the users ID(address)
-        int vouchCredits; // no vouches after the user's vouch aside penalties
-        int rejectCredits; // no rejects after the user's rejct aside penalties
-        uint noOfVotesInDay; // number of votes, user has made within a 24 hour period
+   /// @notice details of each user and their history 
+    struct User{
+        int8 noOfVotesInDay;  
+        uint256 vouchCredits; 
+        uint256 rejectCredits; 
+        address userAddress;        
     }
 
-   //details of each genre 
-    struct genreInfo{
-        int genreScore; //number of total votes for genre
-        int averageScore; // genre score divided by the total number of votes
+   /// @notice details of each genre 
+    struct Genre{
+        int8 totalVotes; 
+        int8 averageScore; 
     }
 
-    /*************mappings**********/
-    mapping (int8 => genreInfo) public genreRegistry; //mapping of all genre types and their scores
-    mapping (uint => trackInfo) public trackRegistry; //mapping storage of all tracks
-    mapping (address => userInfo) public userRegistry; //mapping storage of all users
-    mapping (uint => trackInfo) public playlist;   // playlist mapping track hash to track
-    mapping (address => uint) public timeOfVoteExpiry;//mapping to keep track if user ids in relation to their expiry time
+    /// @notice mappings
+    /// @notice mapping of all genre types and their scores
+    /// @notice mapping storage of all tracks
+    /// @notice mapping storage of all users
+    /// @notice playlist mapping track hash to track
+    /// @notice mapping to keep track if user ids in relation to their expiry time
+    mapping (int8 => Genre) public genreRegistry; 
+    mapping (bytes32 => Track) public trackRegistry; 
+    mapping (address => User) public userRegistry; 
+    mapping (bytes32 => Track) public playlist;  
+    mapping (address => uint) public timeOfVoteExpiry;
 
+    /// @notice ensure trackhash input is not 0
+    /// @notice check if track has been created already
+    /// @notice ensure genre input is valid
+    /// @dev automatic vouch for track creation
+    function proposeTrack(bytes32 trackHash, int8 trackGenre)public{ 
+        int8 maxNumberOfGenres = 3;
 
-    // constructor(){
-    // 	//possibly create all available genres and stored them in genre registry
-    // }
-    
-    /****** functions *********/
-    //temporry function to create new tracks
-    function proposeTrack(uint trackHash, int8 trackGenre)public{ 
         
-        require(trackHash != 0, 'please check track hash is not 0 and retry'); //ensure trackhash input is not 0
-        require(trackRegistry[trackHash].hash == 0, 'this track hash has been used already please try again'); //check if track has been created already
-        require(trackGenre <= 3, 'please entere a valid genre number between 0 and 2'); //ensure genre input is valid
-        trackInfo memory track ;  //created temporary instance of a track
-        track.hash = trackHash;  // assign the temporary instance of track a hash value
-        track.trackGenre = trackGenre; //store track genre in track details
+        require(trackHash != 0, 'please check track hash is not 0 and retry'); 
+        require(trackRegistry[trackHash].hash == 0, 'this track hash has been used already please try again'); 
+        require(trackGenre <= maxNumberOfGenres, 'please entere a valid genre number between 0 and 2'); //
+        Track memory track ;  
+        track.hash = trackHash;  
+        track.trackGenre = trackGenre; 
 
-
-        userInfo memory user;  //created temporary instance of a user
-        user.userId = msg.sender;  // assign the temporary of user instance a track hash value
-        user.vouchCredits = 1; //automatic vouch for track creation
-        userRegistry[msg.sender] = user;//store user in registry
+        User memory user;  
+        user.userAddress = msg.sender;  
+        user.vouchCredits = 1; //
+        userRegistry[msg.sender] = user;
         
-        trackRegistry[trackHash] = track;//store track in registry
-        updateUserIdToVote(trackHash, 1,msg.sender); //update array registry of users who have vouched for this track        
-        noOfTracks++; //increment the number of tracks
-        updateGenreInfo(trackGenre); //update genre information
-        updateNumberOfVotesPerDay(msg.sender);  // update no of votes per day of user
+        trackRegistry[trackHash] = track;
+        updateuserAddressToVote(trackHash, 1,msg.sender); 
+        uint256(noOfTracks).add(1); 
+        updateGenre(trackGenre); 
+        updateNumberOfVotesPerDay(msg.sender);  
 
-        emit trackCreationSuccessful(trackHash, msg.sender,trackGenre, 1);  // emit event that track was created successfuly
+        emit TrackCreationSuccessful(trackHash, msg.sender,trackGenre, 1);  
     }
 
 
-    // this function is used to create new users, which are neccesary to place votes
+    /// @notice this function is used to create new users, which are neccesary to place votes
+    /// @notice function create temporary instance of a new user 
+    /// @notice define userAddress
+    /// @notice store user information in registry 
     function createNewUser()public{ 
-    	userInfo memory newUser; // create temporary instance of a new user 
-    	newUser.userId = msg.sender; //define userID
-    	userRegistry[msg.sender] = newUser; //store user information in registry       
+    	User memory newUser; 
+    	newUser.userAddress = msg.sender; 
+    	userRegistry[msg.sender] = newUser;       
     }    
     
     
-    //this function vouches or rejects the given track based on user vote 
-    function vouchOrReject(uint trackHash, int didVouch)public {        
-        address userId = msg.sender; //create a temporary address instance for userID, this is declared this way so that the user ID can always be easily changed to a different type
-        trackInfo storage track = trackRegistry[trackHash];//retrieve track information from storage
+    /// @notice this function vouches or rejects the given track based on user vote 
+    /// @notice create a temporary address instance for userAddress, this is declared this way so that the user ID can always be easily changed to a different type
+    /// @notice retrieve track information from storage
+    /// @notice ensure user is registered
+    /// @notice ensure track is not BLACKLISTed
+    /// @notice check if user has previously voted for this track
+    /// @notice check if user has votes more than 10 times in a day
+    /// @dev require didvouch param to be either equal to -1 or 1 to avoid excessive lines of code.(-1 = reject, 1= vouch). This code line can easliy be updated in future to allow more voting options
 
-        require(userRegistry[userId].userId != address(0),'user information is not in registry, please create new user'); //ensure user is registered
-        require(uint8(trackRegistry[trackHash].trackState) != 2, 'selected track is blacklisted');// ensure track is not blacklisted
-        require(!track.userDidVote[userId], 'you have already voted on this track'); //check if user has previously voted for this track
-        require(updateNumberOfVotesPerDay(userId),'you have exceeded your number of votes for today, please try after 24hrs');//check if user has votes more than 10 times in a day
-        require((didVouch == -1 || didVouch == 1 ), 'ensure that didvouch paramater is either -1 or 1'); // require didvouch param to be either equal to -1 or 1 to avoid excessive lines of code.(-1 = reject, 1= vouch). This code line can easliy be updated in future to allow more voting options
+    function vouchOrReject(bytes32 trackHash, int8 didVouch)public {        
+        address userAddress = msg.sender; //
+        Track storage track = trackRegistry[trackHash];
+        uint8 enumBlacklistValue = 2;
+
+        require(userRegistry[userAddress].userAddress != address(0),'user information is not in registry, please create new user'); 
+        require(uint8(trackRegistry[trackHash].trackState) != enumBlacklistValue, 'selected track is BLACKLISTed');
+        require(!track.userDidVote[userAddress], 'you have already voted on this track'); 
+        require(updateNumberOfVotesPerDay(userAddress),'you have exceeded your number of votes for today, please try after 24hrs');
+        require((didVouch == -1 || didVouch == 1 ), 'ensure that didvouch paramater is either -1 or 1'); 
         
-        updateTrackRating(trackHash,didVouch); // update the track track rating score based on vouch or reject
-        updateState(trackHash,track.trackGenre);//call function to update the state of the track- sandbox, whitelist, blacklist 
-        updateCredits(trackHash,didVouch,userId);//update user vouch or reject credits
-        updateGenreInfo(track.trackGenre);  //update genre registry with relevant information such as genre score and average score      
-        track.userDidVote[userId] = true; //record that user has voted on this track, to prevent multiple votes a track from the same user
+        updateTrackRating(trackHash,didVouch);
+        updateTrackState(trackHash,track.trackGenre); 
+        updateCredits(trackHash,didVouch,userAddress);
+        updateGenre(track.trackGenre); 
+        track.userDidVote[userAddress] = true; 
         
-        emit voteSuccessful(userId,track.trackGenre, didVouch, userRegistry[userId].noOfVotesInDay); //emit event that vote was successful
+        emit VoteSuccessful(userAddress,track.trackGenre, didVouch, userRegistry[userAddress].noOfVotesInDay); 
     }
 
 
-    //function to updated genre registry and information
-    function updateGenreInfo(int8 trackGenre)internal {
-    	genreInfo storage _genre = genreRegistry[trackGenre]; // retrieve genre information from registry
-    	_genre.genreScore++; //increment genre score
-    	_genre.averageScore = _genre.genreScore/noOfTracks; //update average score
+    /// @notice function to updated genre registry and information
+    /// @notice retrieve genre information from registry
+    /// @notice increment genre score
+    /// @notice update average score
+    function updateGenre(int8 trackGenre)internal {
+    	Genre storage _genre = genreRegistry[trackGenre];
+    	uint256(_genre.totalVotes).add(1); 
+    	_genre.averageScore = int8(uint256(_genre.totalVotes).div(uint256(noOfTracks))); 
     	}
 
     
-    //internal function to update the state of each track and user based on specified mechanics
-    function updateState(uint trackHash, int8 trackGenre)internal {
-        trackInfo storage track = trackRegistry[trackHash]; //retrieve track information from registry
+    /// @notice internal function to update the TrackState of each track and user based on specified mechanics
+    /// @notice retrieve track information from registry
+    /// @notice check if WHITELISTing mechanics are met
+    /// @notice update TrackState to WHITELIST
+    /// @notice if WHITELISTed, save track to playlist
+    /// @notice check if BLACKLISTing mechanics are met
+    /// @notice update TrackState to BLACKLIST
+    /// @notice call function to penalize vouches for BLACKLISTed tracks
+    /// @notice if BLACKLISTed, then remove from registry
+    /// @notice if BLACKLISTed, delet from playlist
+    /// @noticereduce number of track count
+    /// @notice if non of the conditions are met, do nothing
+    function updateTrackState(bytes32 trackHash, int8 trackGenre)internal {
+        Track storage track = trackRegistry[trackHash]; 
         
-        if(uint8(track.trackState) == uint8 (state.sandbox) && track.trackRating > WhitelistThreshold) { // check if whitelisting mechanics are met
-            uint8(track.trackState) == uint8(state.whitelist); //update state to whitelist
-            playlist[trackHash] = track;  // if whitelisted, save track to playlist
-            applyWhitelistPenalty(trackHash); // aply whitelist penalty
-        }else if(uint8(track.trackState) == uint8(state.sandbox) && track.trackRating < BlacklistThreshold) { //check if blacklisting mechanics are met
-            uint8(track.trackState) == uint8(state.blacklist); //update state to blacklist
-            applyBlacklistPenalty(trackHash, trackGenre); // call function to penalize vouches for blacklisted tracks
-            delete trackRegistry[trackHash]; // if blacklisted, then remove from registry
-            delete playlist[trackHash]; // if blacklisted, delet from playlist
-            noOfTracks-- ; //reduce number of track count
+        if(uint8(track.trackState) == uint8 (TrackState.SANDBOX) && track.trackRating > WhitelistThreshold) { 
+            uint8(track.trackState) == uint8(TrackState.WHITELIST); 
+            playlist[trackHash] = track;  
+            applyWhitelistPenalty(trackHash); 
+        }else if(uint8(track.trackState) == uint8(TrackState.SANDBOX) && track.trackRating < BlacklistThreshold) { 
+            uint8(track.trackState) == uint8(TrackState.BLACKLIST); 
+            applyBlacklistPenalty(trackHash, trackGenre); 
+            delete trackRegistry[trackHash]; 
+            delete playlist[trackHash]; 
+            uint256(noOfTracks).sub(1) ; 
         }
-        return; // if non of the conditions are met, do nothing
     }
 
 
-         //penalize voters who rejected tracks that are whitelisted
-    function applyWhitelistPenalty(uint trackHash)internal{
-        trackInfo storage track = trackRegistry[trackHash]; //retrieve track information from registry
-        int _trackRating = track.trackRating; // retrieve track rating
-        int penalityScore = _trackRating - WhitelistThreshold; //calculate penalty score
-        address _userId; //create temporary address type of user ID
-        uint length = track.rejects.length; // get the length of array containing the address of all users who voted reject on track
+    /// @notice penalize voters who rejected tracks that are WHITELISTed
+    /// @notice retrieve track information from registry
+    /// @notice retrieve track rating
+    /// @notice calculate penalty score
+    /// @notice create temporary address type of user ID
+    /// @notice get the length of array containing the address of all users who voted reject on track
+    /// @notice loop through all voters of reject and apply penalty
+    /// @notice retrieve user ids
+    /// @notice apply penalty 
+    function applyWhitelistPenalty(bytes32 trackHash)internal returns(bool){
+        Track storage track = trackRegistry[trackHash]; 
+        int8 _trackRating = track.trackRating; 
+        int8 penalityScore = int8(uint256(_trackRating).sub(uint256(WhitelistThreshold))); 
+        address _userAddress; 
+        uint length = track.rejects.length; 
                 
-            for(uint i=0; i<length ; i++){ // loop through all voters of reject and apply penalty
-                _userId = track.rejects[i];//retrieve user ids
-                userRegistry[_userId].vouchCredits -= penalityScore; //apply penalty 
+            for(uint i=0; i<length ; i++){ 
+                _userAddress = track.rejects[i];
+                userRegistry[_userAddress].vouchCredits.sub(uint256(penalityScore)); 
             }
+            return true;
         }    
 
-
-       //penalize voters who vouched for tracks that are blacklisted
-    function applyBlacklistPenalty(uint trackHash, int8 _genre)internal{
-        trackInfo storage track = trackRegistry[trackHash];  //retrieve track information from registry
-        int _averageScore = genreRegistry[_genre].averageScore; // retrieve genre average score
-        int penalityScore = _averageScore * punishmentMultiplier;  //calculate penalty score
-        address _userId;  //create temporary address type of user ID
-        uint length = track.vouches.length;  // get the length of array containing the address of all users who voted vouch on track
+    /// @notice penalize voters who vouched for tracks that are BLACKLISTed
+    /// @notice retrieve track information from registered
+    /// @notice retrieve genre average score
+    /// @notice calculate penalty score
+    /// @notice create temporary address type of user ID
+    /// @notice get the length of array containing the address of all users who voted vouch on track
+    /// @notice loop through all voters of vouch on the track and apply penalty
+    /// @notice retrieve user id
+    /// @notice apply penalty
+    function applyBlacklistPenalty(bytes32 trackHash, int8 _genre)internal returns(bool){
+        Track storage track = trackRegistry[trackHash];  
+        int8 _averageScore = genreRegistry[_genre].averageScore; 
+        int8 penalityScore = int8(uint256(_averageScore).mul(uint256(PunishmentMultiplier)));  
+        address _userAddress; 
+        uint length = track.vouches.length;  
                 
-            for(uint i=0; i<length ; i++){  // loop through all voters of vouch on the track and apply penalty
-                _userId = track.vouches[i];//retrieve user ids
-                userRegistry[_userId].rejectCredits -= penalityScore; //apply penalty 
+            for(uint i=0; i<length ; i++){  
+                _userAddress = track.vouches[i];
+                userRegistry[_userAddress].rejectCredits.sub(uint256(penalityScore));  
             }
+            return true;
         }
 
-      // function to update arrays within tracks that contain all user ids of all vouches and rejections
-    function updateUserIdToVote(uint trackHash, int didVouch,address userId)internal{        
-        trackInfo storage track = trackRegistry[trackHash]; //retrieve track information from registry
+    /// @notice function to update arrays within tracks that contain all user ids of all vouches and rejections
+    /// @notice retrieve track information from register
+    /// @notice update array of users who vouched for the track
+    /// @notice update array of users who rejected the track
+    function updateuserAddressToVote(bytes32 trackHash, int8 didVouch,address userAddress)internal{        
+        Track storage track = trackRegistry[trackHash]; 
         if(didVouch == 1){
-            track.vouches.push(userId); //update array of users who vouched for the track
+            track.vouches.push(userAddress); 
         }
         else if(didVouch == -1){
-            track.rejects.push(userId); //update array of users who rejected the track
+            track.rejects.push(userAddress); 
         } 
     }    
     
     
-       //this function assigns credits to users appropriately based on vote type(vouch/reject)
-    function updateTrackRating(uint trackHash, int didVouch)internal{
-        trackInfo storage track = trackRegistry[trackHash]; //retrieve track information from registry
-        track.trackRating = track.trackRating + didVouch;//update average score        
+    /// @notice this function assigns credits to users appropriately based on vote type(vouch/reject)
+    /// @notice retrieve track information from registry
+    /// @notice update average score
+    function updateTrackRating(bytes32 trackHash, int8 didVouch)internal{
+        Track storage track = trackRegistry[trackHash]; 
+        track.trackRating = int8(uint256(track.trackRating).add(uint256(didVouch)));        
         }        
     
     
-    //this function checks if user is allowed to vote based on daily vote limits 
-    function updateNumberOfVotesPerDay(address userId)internal returns (bool){
+    /// @notice this function checks if user is allowed to vote based on daily vote limits 
+    /// @notice check if its the first time the user is voting
+    /// @notice set expiration time
+    /// @notice increase the number of votes the user has made in a day
+    /// @notice check if time is expired
+    /// @notice expiration time is due, so reset expiration time
+    /// @notice increment user votes in a day if expiration time is passed
+    /// @notice check if user has exceeded number of allowed votes in a day
+    /// @notice increment user votes in a day if less than limit
+    function updateNumberOfVotesPerDay(address userAddress)internal returns (bool){
+        int8 maxNoVotesInADay = 10;
 
-        if (timeOfVoteExpiry[userId] == 0){ //check if its the first time the user is voting
-            timeOfVoteExpiry[userId] = now + 1 days;// set expiration time
-            userRegistry[userId].noOfVotesInDay  = 1; // increase the number of votes the user has made in a day
+        if (timeOfVoteExpiry[userAddress] == 0){ 
+            timeOfVoteExpiry[userAddress] = now + 1 days;
+            userRegistry[userAddress].noOfVotesInDay  = 1; 
             return true;            
        } else{
-       		uint expirationTime = timeOfVoteExpiry[userId];
-       		//userRegistry[userId].noOfVotesInDay < 11 ||
-       		if (now > expirationTime ){ //check if time is expired
-	            timeOfVoteExpiry[userId] = now + 1 days; //expiration time is due, so reset expiration time
-	            userRegistry[userId].noOfVotesInDay +=1; // increment user votes in a day if expiration time is passed
+       		uint expirationTime = timeOfVoteExpiry[userAddress];
+       		if (now > expirationTime ){ 
+	            timeOfVoteExpiry[userAddress] = now + 1 days; 
+	            uint256(userRegistry[userAddress].noOfVotesInDay).add(1); 
             	return true;
 	        }else{
-	        if (userRegistry[userId].noOfVotesInDay < 10){ //check if user has exceeded number of allowed votes in a day
-	        	userRegistry[userId].noOfVotesInDay +=1; // increment user votes in a day if less than limit
+	        if (userRegistry[userAddress].noOfVotesInDay < maxNoVotesInADay){ 
+	        	uint256(userRegistry[userAddress].noOfVotesInDay).add(1);    
 	        	return true;
 	        }
 	        	return false;
@@ -213,29 +273,42 @@ contract OceanBounty  {
     }      
 
 
-    //this function updates all subsequent user credits based on vote type
-    function updateCredits(uint trackHash, int didVouch, address userId)internal{       
-        trackInfo storage track = trackRegistry[trackHash];  //retrieve track information from registry
-        userInfo storage user = userRegistry[userId];
-        address _userId;
+    /// @notice this function updates all subsequent user credits based on vote type
+    /// @notice retrieve track information from registry
+    /// @notice if the vote is a reject, then loop through all previous rejects and increment all address with a reject credit of +1 
+    /// @notice get array length of previous addressed who have voted reject   
+    /// @notice retrieve user ids   
+    /// @notice update all previous users with relevant reject credits
+    /// @notice  update users reject credits
+    /// @notice update vouch/reject array with users vote type
+    /// @notice if the vote is a vouch, then loop through all previous vouches and increment all address with a vouch credit of +1 
+    /// @notice get array length of previous addressed who have vouched   
+    /// @notice retrieve user ids
+    /// @notice update all previous users with relevant vouch credits
+    /// @notice update users reject credits
+    /// @notice update vouch/reject array with users vote type
+    function updateCredits(bytes32 trackHash, int8 didVouch, address userAddress)internal{       
+        Track storage track = trackRegistry[trackHash];  
+        User storage user = userRegistry[userAddress];
+        address _userAddress;
         
-        if (didVouch == -1){      // if the vote is a reject, then loop through all previous rejects and increment all address with a reject credit of +1  	
-            uint length = track.rejects.length;  //get array length of previous addressed who have voted reject          
+        if (didVouch == -1){      
+            uint length = track.rejects.length;          
             for(uint i=0; i<length ; i++){
-                _userId = track.rejects[i];//retrieve user ids
-                userRegistry[_userId].rejectCredits++; //update all previous users with relevant reject credits
+                _userAddress = track.rejects[i];
+                userRegistry[_userAddress].rejectCredits.add(1);  
             }
-            user.rejectCredits++; // update users reject credits
-            updateUserIdToVote(trackHash, didVouch,userId); // update vouch/reject array with users vote type
-        } else if(didVouch == 1 ){      // if the vote is a vouch, then loop through all previous vouches and increment all address with a vouch credit of +1   	
-            uint length = track.vouches.length; //get array length of previous addressed who have vouched
+            user.rejectCredits.add(1); 
+            updateuserAddressToVote(trackHash, didVouch,userAddress); 
+        } else if(didVouch == 1 ){   
+            uint length = track.vouches.length; 
                 
             for(uint i=0; i<length ; i++){
-                _userId = track.vouches[i];//retrieve user ids
-                userRegistry[_userId].vouchCredits++; //update all previous users with relevant vouch credits
+                _userAddress = track.vouches[i];
+                userRegistry[_userAddress].vouchCredits.add(1); 
             }
-            user.vouchCredits++; // update users reject credits
-            updateUserIdToVote(trackHash, didVouch,userId); // update vouch/reject array with users vote type
+            user.vouchCredits.add(1); 
+            updateuserAddressToVote(trackHash, didVouch,userAddress); 
             } 
     }    
 }
