@@ -1,11 +1,11 @@
-const oceanBounty = artifacts.require('OceanBounty')
+const oceanBounty = artifacts.require('OceanBounty2')
 
 contract('oceanBounty', accounts => {
 
 	let user0 = accounts[0]; let user1 = accounts[1]; let user2 = accounts[2];
     let user3 = accounts[3];  let user4 = accounts[4];  let user5 = accounts[5];
     let randomMaliciousUser = accounts[5]; 
-    let trackHash1 = 1; let trackHash2 = 2; let trackHash3 = 3; let trackHash4 = 4; let trackHash5 = 5;
+    let trackHash1 = "0x123"; let trackHash2 = "14555"; let trackHash3 = 3; let trackHash4 = 4; let trackHash5 = 5;
     let trackHash6 = 6; let trackHash7 = 7; let trackHash8 = 8; let trackHash9 = 9; let trackHash10 = 10;
 
     let jazz = 0; let blues = 1; let rocknroll = 2; let country = 3;
@@ -29,7 +29,7 @@ contract('oceanBounty', accounts => {
 
                 it('can create a new track', async function () { 
                      tx = await this.contract.proposeTrack(trackHash2,jazz, {from: user1})
-                     assert.equal(tx.logs[0].event, 'TrackCreationSuccessful') // confirm emitted event after storage 
+                     assert.equal(tx.logs[0].event, 'trackCreationSuccessful') // confirm emitted event after storage 
 
                 })
 
@@ -45,7 +45,7 @@ contract('oceanBounty', accounts => {
 
                 it('user information is stored in registry', async function () { 
                      let userInfo = await this.contract.userRegistry(user1)
-                     assert.equal(userInfo.userAddress, user1) // confirm user info is stored by searching user registry with user id
+                     assert.equal(userInfo.userId, user1) // confirm user info is stored by searching user registry with user id
                 })
 
         })
@@ -56,7 +56,6 @@ contract('oceanBounty', accounts => {
 
 			    it('stores single user votes track registry', async function () { 
 		             await this.contract.vouchOrReject(trackHash1,vouch, {from: user0})
-		             var nofotracks = await this.contract.noOfTracks({from: user0})
 
 		             let trackInfo = await this.contract.trackRegistry(trackHash1)
 		             assert.equal(trackInfo.trackRating, vouch)		             
@@ -102,9 +101,10 @@ contract('oceanBounty', accounts => {
 		             await this.contract.proposeTrack(trackHash2, jazz, {from: user2})
 		             await this.contract.vouchOrReject(trackHash2,vouch, {from: user3})
 		             await this.contract.vouchOrReject(trackHash2,vouch, {from: user4})
+		             await this.contract.vouchOrReject(trackHash2,vouch, {from: user5})
 
 			    	 let userInfo = await this.contract.userRegistry(user2)//user0 created the contract, and 4 vouches have been made on same track
-		             assert.equal(userInfo.vouchCredits, 3)  // with 3 additional vouches after track creation, total vouches should be 4           
+		             assert.equal(userInfo.vouchCredits, 4)  // with 3 additional vouches after track creation, total vouches should be 4           
         })
 
 			    	it('accurately calculates and increments reject credits on subsequent rejects.', async function () { 
@@ -117,22 +117,17 @@ contract('oceanBounty', accounts => {
 		             assert.equal(userInfo.rejectCredits, 3)  
 
         })
-			    	})
-
-			   
 
         describe('genre information updates accurately', () => { 
 
 			    it('when a track is created, the genre score increments', async function () {
 			    	let genreDetails = await this.contract.genreRegistry(blues)
-			    	let prevGenreScore = genreDetails.totalVotes
+			    	let prevGenreScore = genreDetails.genreScore 
 		            await this.contract.proposeTrack(trackHash2,blues,{from: user2})
 
-		             let genreDetails2 = await this.contract.genreRegistry(blues)
-		             let currentGenreScore = genreDetails2.totalVotes
+		             genreDetails = await this.contract.genreRegistry(blues)
+		             let currentGenreScore = genreDetails.genreScore
 		             assert.equal(currentGenreScore ,(+prevGenreScore + 1))
-
-		             console.log("genre score "+ await this.contract.genreRegistry(blues))
 
 		         })
 
@@ -140,22 +135,22 @@ contract('oceanBounty', accounts => {
 			    it('increments the genre score when a vouch is made', async function () {
 			    	await this.contract.proposeTrack(trackHash3,rocknroll,{from: user2})
 			    	let genreDetails = await this.contract.genreRegistry(rocknroll)
-			    	let prevGenreScore = genreDetails.totalVotes
+			    	let prevGenreScore = genreDetails.genreScore 
 		            await this.contract.vouchOrReject(trackHash3,vouch, {from: user3})
 
-		             let genreDetails2 = await this.contract.genreRegistry(rocknroll)
-		             let currentGenreScore = genreDetails2.totalVotes
+		             genreDetails = await this.contract.genreRegistry(rocknroll)
+		             let currentGenreScore = genreDetails.genreScore
 		             assert.equal(currentGenreScore ,(+prevGenreScore + 1))
 		         })
 
 			    it('increments the genre score when a reject is made', async function () {
 			    	await this.contract.proposeTrack(trackHash2,country,{from: user2})
 			    	let genreDetails = await this.contract.genreRegistry(country)
-			    	let prevGenreScore = genreDetails.totalVotes 
+			    	let prevGenreScore = genreDetails.genreScore 
 		            await this.contract.vouchOrReject(trackHash2,reject, {from: user3})
 
 		             genreDetails = await this.contract.genreRegistry(country)
-		             let currentGenreScore = genreDetails.totalVotes
+		             let currentGenreScore = genreDetails.genreScore
 		             assert.equal(currentGenreScore ,(+prevGenreScore + 1))
 		         })
 
@@ -166,12 +161,9 @@ contract('oceanBounty', accounts => {
 			    it('does not throws an error with the same user on 10 tries, but throws on the 11th if tries are made within in a day' , async function () {
 			   	await this.contract.proposeTrack(trackHash2,rocknroll,{from: user3})
             for(let i = 0; i < 10; i ++) { 
-				await this.contract.vouchOrReject(i,vouch, {from: user2}) 
+				await this.contract.vouchOrReject(i,vouch, {from: user2})   
             }
-            	
             	await expectThrow(this.contract.vouchOrReject(11,vouch, {from: user2}))// on the 11th try, expect error 
-
-
 			})
 			})
 
@@ -214,11 +206,11 @@ contract('oceanBounty', accounts => {
 
 					await this.contract.vouchOrReject(trackHash2,reject, {from: accounts[i]})   
 	            }
-	            	let genreDetails = await this.contract.genreRegistry(2);
+	            	let genreDetails = await this.contract.genreRegistry(0);
 				   	let _averageScore = genreDetails.averageScore;
-				   	let penalityScore = _averageScore * (await this.contract.PunishmentMultiplier());
+				   	let penalityScore = _averageScore * (await this.contract.punishmentMultiplier());
 	            	let rejectCreditsAfterBlacklist = await this.contract.userRegistry(user2)
-	            	await assert.equal(+rejectCreditsAfterBlacklist.rejectCredits, penalityScore)
+	            	await assert.equal(+rejectCreditsAfterBlacklist.rejectCredits, -penalityScore)
 			})
 
 
@@ -248,6 +240,7 @@ contract('oceanBounty', accounts => {
 
 	})
 
+})
 
 
 
