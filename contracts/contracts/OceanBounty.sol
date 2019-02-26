@@ -180,7 +180,7 @@ contract OceanBounty is Ownable {
     /// @notice loop through all voters of reject and apply penalty
     /// @notice retrieve user ids
     /// @notice apply penalty 
-    function applyWhitelistPenalty(uint trackHash)internal returns(bool){
+    function applyWhitelistPenalty(uint trackHash)internal view{
         Track storage track = trackRegistry[trackHash]; 
         int16 _trackRating = track.trackRating; 
         int8 penalityScore = int8(uint256(_trackRating).sub(uint256(WhitelistThreshold))); 
@@ -191,7 +191,7 @@ contract OceanBounty is Ownable {
                 _userAddress = track.rejects[i];
                 userRegistry[_userAddress].vouchCredits.sub(uint256(penalityScore)); 
             }
-            return true;
+            //return true;
         }    
 
     /// @notice penalize voters who vouched for tracks that are BLACKLISTed
